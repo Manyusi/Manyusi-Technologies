@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quotation System</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;}
+.container { max-width:700px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
+h2 { text-align:center; }
+button { padding:10px; border:none; border-radius:5px; cursor:pointer; margin:5px; display:inline-flex; align-items:center; justify-content:center;}
+input, textarea { width:100%; padding:8px; margin-top:5px; border-radius:5px; border:1px solid #ccc; }
+.hidden { display:none; }
+.success { color:green; text-align:center; display:none; margin-top:10px; }
+.link-style { background:none; color:#007bff; text-decoration:underline; cursor:pointer; padding:0; border:none; font-size:1em;}
+table { width:100%; border-collapse: collapse; margin-top:10px;}
+th, td { border:1px solid #ccc; padding:5px; text-align:center;}
+.spinner { border:3px solid #f3f3f3; border-top:3px solid white; border-radius:50%; width:16px; height:16px; margin-left:8px; animation:spin 0.8s linear infinite;}
+@keyframes spin {0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }}
+.button-container { display:flex; justify-content:flex-start; gap:10px; margin-top:10px;}
+.blue-btn { background-color:#007bff; color:white; }
+.light-blue-btn { background-color:#5bc0de; color:white; }
+</style>
+
+<!-- Uploadcare Widget -->
+<script>UPLOADCARE_PUBLIC_KEY = "1ff71a95d6eb839640a3";</script>
+<script src="https://ucarecdn.com/libs/widget/3.x/uploadcare.full.min.js"></script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+<!-- EmailJS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>emailjs.init("r4yHhQf9DW27Zk4T6");</script>
+</head>
+<body>
+
+<div class="container">
+<h2>Quotation System</h2>
+<button class="blue-btn" onclick="showForm()">Request Quotation</button>
+
+<div id="quotationForm" class="hidden">
+
+  <!-- Upload Section -->
+  <div id="uploadSection">
+    <label>Name</label>
+    <input type="text" id="name" required>
+    <label>Email</label>
+    <input type="email" id="email" required>
+    <label>Phone</label>
+    <input type="text" id="phone">
+    <label>Message / Notes</label>
+    <textarea id="message" rows="3"></textarea>
+    <label>Upload Your Quotation Document (PDF)</label>
+    <input type="hidden" role="uploadcare-uploader" id="uploadFile">
+    <p>
+      Don’t have a document? 
+      <button class="link-style" onclick="showCreateLink()">Click here to create quotation document</button>
+    </p>
+  </div>
+
+  <!-- Create PDF Section with Table -->
+  <div id="createSection" class="hidden">
+    <h3>Create Your Quotation Document</h3>
+    <table id="quotationTable">
+      <thead>
+        <tr>
+          <th>S/N</th>
+          <th>Product Name</th>
+          <th>Quantity</th>
+          <th>Unity</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><input type="text" class="productName"></td>
+          <td><input type="number" class="quantity"></td>
+          <td><input type="text" class="unity"></td>
+          <td><button type="button" onclick="removeRow(this)">Remove</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <button type="button" class="light-blue-btn" onclick="addRow()">Add Row</button>
+    <button type="button" class="blue-btn" onclick="generatePDFTable()">Generate PDF</button>
+    <p>After generating PDF, you can upload it using the file input above.</p>
+    <button type="button" class="light-blue-btn" onclick="backToUpload()">← Back to Upload</button>
+  </div>
+
+  <!-- Submit & Cancel Buttons -->
+  <div class="button-container">
+    <button id="submitBtn" style="background-color:green; color:white;" onclick="submitQuotation()">Submit Quotation</button>
+    <button id="cancelBtn" style="background-color:red; color:white;" onclick="cancelQuotation()">Cancel</button>
+  </div>
+
+</div>
+
+<p class="success" id="successMessage">✅ Quotation submitted successfully!</p>
+</div>
+
+<script>
+// Show/hide sections
+function showForm(){ document.getElementById('quotationForm').classList.remove('hidden'); }
+function showCreateLink(){ document.getElementById('uploadSection').classList.add('hidden'); document.getElementById('createSection').classList.remove('hidden'); }
+function backToUpload(){ document.getElementById('createSection').classList.add('hidden'); document.getElementById('uploadSection').classList.remove('hidden'); }
+
+// Add/Remove table rows
+function addRow() {
+  const table = document.getElementById("quotationTable").getElementsByTagName('tbody')[0];
+  const rowCount = table.rows.length;
+  const row = table.insertRow();
+  row.innerHTML = `
+    <td>${rowCount + 1}</td>
+    <td><input type="text" class="productName"></td>
+    <td><input type="number" class="quantity"></td>
+    <td><input type="text" class="unity"></td>
+    <td><button type="button" onclick="removeRow(this)">Remove</button></td>
+  `;
+}
+function removeRow(button) { 
+  const row = button.parentElement.parentElement; 
+  row.parentElement.removeChild(row); 
+  updateSN(); 
+}
+function updateSN() { 
+  const table = document.getElementById("quotationTable").getElementsByTagName('tbody')[0]; 
+  for (let i=0;i<table.rows.length;i++){ table.rows[i].cells[0].innerText=i+1; } 
+}
+
+// Generate PDF with borders
+function generatePDFTable() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const name = document.getElementById("name").value;
+  const email = document.getElementById("email").value;
+  const phone = document.getElementById("phone").value;
+  const message = document.getElementById("message").value;
+
+  doc.text("Quotation Request", 14, 15);
+  doc.text(`Name: ${name}`, 14, 25);
+  doc.text(`Email: ${email}`, 14, 32);
+  doc.text(`Phone: ${phone}`, 14, 39);
+  doc.text(`Message: ${message}`, 14, 46);
+
+  const table = document.getElementById("quotationTable").getElementsByTagName('tbody')[0];
+  const tableData = [];
+  for (let i = 0; i < table.rows.length; i++) {
+    const row = table.rows[i];
+    tableData.push([
+      row.cells[0].innerText,
+      row.cells[1].getElementsByTagName('input')[0].value,
+      row.cells[2].getElementsByTagName('input')[0].value,
+      row.cells[3].getElementsByTagName('input')[0].value
+    ]);
+  }
+
+  doc.autoTable({
+    startY: 55,
+    head: [['S/N', 'Product Name', 'Quantity', 'Unity']],
+    body: tableData,
+    styles: { cellPadding: 3, fontSize: 10 },
+    headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold' },
+    tableLineColor: [0,0,0],
+    tableLineWidth: 0.5,
+    theme: 'grid'
+  });
+
+  doc.save("quotation.pdf");
+  alert("PDF generated successfully!");
+}
+
+// Submit quotation with animated button
+function submitQuotation(){
+  const submitBtn=document.getElementById("submitBtn"); 
+  const originalText=submitBtn.innerHTML;
+  submitBtn.disabled=true; 
+  submitBtn.innerHTML="Sending"; 
+  const spinner=document.createElement("span"); 
+  spinner.classList.add("spinner"); 
+  submitBtn.appendChild(spinner);
+
+  const name=document.getElementById("name").value;
+  const email=document.getElementById("email").value;
+  const phone=document.getElementById("phone").value;
+  const message=document.getElementById("message").value;
+  const fileWidget=uploadcare.Widget('[role=uploadcare-uploader]');
+  const fileValue=fileWidget.value();
+
+  const finishSending=()=>{ 
+    submitBtn.disabled=false; 
+    submitBtn.innerHTML=originalText; 
+    document.getElementById("successMessage").style.display="block"; 
+  };
+
+  if(fileValue){ 
+    fileValue.done(fileInfo=>{ 
+      const fileUrl=fileInfo.cdnUrl; 
+      const emailBody=`New Quotation Request\n\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nMessage: ${message}\nFile: ${fileUrl}\n\n`; 
+      sendEmailJS(name,email,emailBody,[],finishSending); 
+    }); 
+  } else { 
+    const emailBody=`New Quotation Request\n\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nMessage: ${message}\n\n`; 
+    sendEmailJS(name,email,emailBody,[],finishSending); 
+  }
+}
+
+// Send email via EmailJS with Reply-To
+function sendEmailJS(name,email,emailBody,attachments,callback){
+  const templateParams={
+    from_name:name,
+    from_email:email,
+    to_name:"Admin",
+    message:emailBody,
+    attachments:attachments,
+    reply_to:email
+  };
+  emailjs.send("service_k6urttd","template_4wd9qwi",templateParams)
+  .then(function(response){console.log("SUCCESS!",response.status,response.text);if(callback)callback();},
+        function(error){console.log("FAILED...",error);alert("Failed to send quotation.");if(callback)callback();});
+}
+
+// Cancel button
+function cancelQuotation(){
+  document.getElementById("quotationForm").classList.add("hidden");
+  document.getElementById("successMessage").style.display="none";
+}
+</script>
+</body>
+</html>
